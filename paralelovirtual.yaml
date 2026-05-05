@@ -1,5 +1,5 @@
 blueprint:
-  name: Paralelo Virtual - mcamtech - V1.1
+  name: Paralelo Virtual - mcamtech V1.2
   description: Acende/Apaga todos os switches/lights do grupo simultaneamente
   domain: automation
   input:
@@ -12,6 +12,9 @@ blueprint:
             - light
           multiple: true
 
+variables:
+  entidades: !input entrada_switchs
+
 trigger:
   - platform: state
     entity_id: !input entrada_switchs
@@ -19,11 +22,18 @@ trigger:
       - "on"
       - "off"
 
+condition:
+  - condition: template
+    value_template: >
+      {{ expand(entidades)
+         | rejectattr('state', 'eq', trigger.to_state.state)
+         | list | count > 0 }}
+
 action:
   - service: "homeassistant.turn_{{ trigger.to_state.state }}"
     target:
       entity_id: !input entrada_switchs
   - delay:
-      seconds: 1
+      seconds: 2
 
 mode: single
