@@ -1,6 +1,9 @@
 blueprint:
-  name: Paralelo Virtual - mcamtech V1.2
-  description: Acende/Apaga todos os switches/lights do grupo simultaneamente
+  name: Paralelo Virtual - mcamtech V2.0
+  description: >
+    Mantém os switches/lights do grupo sincronizados. Reage só a
+    acionamentos reais (físicos ou pelo app), ignora mudanças causadas
+    pela própria automação e retornos de dispositivo indisponível.
   domain: automation
   input:
     entrada_switchs:
@@ -15,25 +18,34 @@ blueprint:
 variables:
   entidades: !input entrada_switchs
 
-trigger:
-  - platform: state
+triggers:
+  - trigger: state
     entity_id: !input entrada_switchs
+    from:
+      - "on"
+      - "off"
     to:
       - "on"
       - "off"
 
-condition:
+conditions:
+  # Ignora mudanças causadas por automações (acaba com o ping-pong)
   - condition: template
-    value_template: >
-      {{ expand(entidades)
-         | rejectattr('state', 'eq', trigger.to_state.state)
-         | list | count > 0 }}
+    value_template: "{{ trigger.to_state.context.parent_id is none }}"
 
-action:
-  - service: "homeassistant.turn_{{ trigger.to_state.state }}"
+actions:
+  # Comanda só quem está diferente, e nunca o próprio interruptor tocado
+  - variables:
+      alvos: >
+        {{ expand(entidades)
+           | rejectattr('entity_id', 'eq', trigger.entity_id)
+           | rejectattr('state', 'eq', trigger.to_state.state)
+           | map(attribute='entity_id') | list }}
+  - condition: template
+    value_template: "{{ alvos | count > 0 }}"
+  - action: "homeassistant.turn_{{ trigger.to_state.state }}"
     target:
-      entity_id: !input entrada_switchs
-  - delay:
-      seconds: 2
+      entity_id: "{{ alvos }}"
 
-mode: single
+mode: restart
+max_exceeded: silent
